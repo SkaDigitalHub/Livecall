@@ -50,15 +50,6 @@
             overflow: hidden;
             height: 600px;
             margin-bottom: 1rem;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-        }
-        
-        .video-placeholder {
-            text-align: center;
-            padding: 2rem;
         }
         
         .controls {
@@ -91,11 +82,6 @@
             background-color: #c53030;
         }
         
-        button:disabled {
-            background-color: #a0aec0;
-            cursor: not-allowed;
-        }
-        
         .participant-info {
             background-color: white;
             border-radius: 8px;
@@ -111,94 +97,6 @@
             color: #718096;
             font-size: 0.9rem;
         }
-
-        .permission-prompt {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-
-        .prompt-content {
-            background-color: white;
-            padding: 2rem;
-            border-radius: 8px;
-            max-width: 500px;
-            text-align: center;
-        }
-
-        .prompt-content h3 {
-            margin-bottom: 1rem;
-            color: #1a365d;
-        }
-
-        .prompt-content p {
-            margin-bottom: 1.5rem;
-            color: #4a5568;
-        }
-
-        .permission-options {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-        }
-
-        #request-permission {
-            background-color: #4299e1;
-            color: white;
-            border: none;
-            padding: 0.8rem 1.5rem;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background-color 0.3s;
-        }
-
-        #request-permission:hover {
-            background-color: #3182ce;
-        }
-
-        #deny-permission {
-            background-color: #e53e3e;
-            color: white;
-            border: none;
-            padding: 0.8rem 1.5rem;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background-color 0.3s;
-        }
-
-        #deny-permission:hover {
-            background-color: #c53030;
-        }
-
-        .error-message {
-            color: #e53e3e;
-            margin-top: 1rem;
-            font-weight: bold;
-        }
-
-        .browser-help {
-            margin-top: 2rem;
-            font-size: 0.9rem;
-            color: #4a5568;
-        }
-
-        .browser-help a {
-            color: #4299e1;
-            text-decoration: none;
-        }
-
-        .browser-help a:hover {
-            text-decoration: underline;
-        }
         
         @media (max-width: 768px) {
             .video-container {
@@ -208,48 +106,23 @@
             .controls {
                 flex-wrap: wrap;
             }
-
-            .permission-options {
-                flex-direction: column;
-            }
         }
     </style>
 </head>
 <body>
     <header>
         <div class="logo">GRWC <span>MEETING POINT</span></div>
-        <div id="meeting-status">Loading meeting...</div>
+        <div id="meeting-status">Connecting...</div>
     </header>
     
-    <div class="permission-prompt" id="permission-prompt">
-        <div class="prompt-content">
-            <h3>Permission Required</h3>
-            <p>To join the meeting, we need access to your microphone and camera.</p>
-            <div class="permission-options">
-                <button id="request-permission">Allow Access</button>
-                <button id="deny-permission">Continue Without</button>
-            </div>
-            <div id="permission-error" class="error-message"></div>
-            <div class="browser-help">
-                If you've previously denied access, you'll need to update your browser settings.
-                <a href="#" id="help-link">Learn how to enable permissions</a>.
-            </div>
-        </div>
-    </div>
-    
     <div class="container">
-        <div class="video-container" id="video-container">
-            <div class="video-placeholder" id="video-placeholder">
-                <h3>Waiting for permissions...</h3>
-                <p>Please allow microphone and camera access to continue</p>
-            </div>
-        </div>
+        <div class="video-container" id="video-container"></div>
         
         <div class="controls">
-            <button id="toggle-video" disabled>Toggle Video</button>
-            <button id="toggle-audio" disabled>Toggle Audio</button>
-            <button id="share-screen" disabled>Share Screen</button>
-            <button class="leave" id="leave-call" disabled>Leave Meeting</button>
+            <button id="toggle-video">Toggle Video</button>
+            <button id="toggle-audio">Toggle Audio</button>
+            <button id="share-screen">Share Screen</button>
+            <button class="leave" id="leave-call">Leave Meeting</button>
         </div>
         
         <div class="participant-info">
@@ -267,116 +140,8 @@
     <script crossorigin src="https://unpkg.com/@daily-co/daily-js"></script>
     <script>
         let callFrame;
-        let hasCameraAccess = false;
-        let hasMicrophoneAccess = false;
         
         document.addEventListener('DOMContentLoaded', function() {
-            // Check permissions when page loads
-            checkPermissions();
-            
-            // Set up permission prompt buttons
-            document.getElementById('request-permission').addEventListener('click', requestMediaAccess);
-            document.getElementById('deny-permission').addEventListener('click', continueWithoutMedia);
-            document.getElementById('help-link').addEventListener('click', showHelp);
-        });
-
-        function checkPermissions() {
-            // Try to get current permissions state
-            if (navigator.permissions && navigator.permissions.query) {
-                Promise.all([
-                    navigator.permissions.query({ name: 'camera' }).catch(() => ({ state: 'prompt' })),
-                    navigator.permissions.query({ name: 'microphone' }).catch(() => ({ state: 'prompt' }))
-                ]).then(results => {
-                    const [cameraPermission, micPermission] = results;
-                    
-                    if (cameraPermission.state === 'granted' && micPermission.state === 'granted') {
-                        // Already have permissions
-                        hasCameraAccess = true;
-                        hasMicrophoneAccess = true;
-                        hidePermissionPrompt();
-                        initCallFrame();
-                    } else if (cameraPermission.state === 'denied' || micPermission.state === 'denied') {
-                        // Permissions were previously denied
-                        showPermissionDenied();
-                    } else {
-                        // Need to request permissions
-                        showPermissionPrompt();
-                    }
-                });
-            } else {
-                // Browser doesn't support permissions API - show prompt
-                showPermissionPrompt();
-            }
-        }
-
-        function showPermissionPrompt() {
-            document.getElementById('permission-prompt').style.display = 'flex';
-            document.getElementById('permission-error').textContent = '';
-            document.getElementById('meeting-status').textContent = 'Waiting for permissions...';
-        }
-
-        function hidePermissionPrompt() {
-            document.getElementById('permission-prompt').style.display = 'none';
-        }
-
-        function showPermissionDenied() {
-            document.getElementById('permission-prompt').style.display = 'flex';
-            document.getElementById('permission-error').textContent = 
-                'Access was previously denied. Please enable permissions in your browser settings.';
-            document.getElementById('meeting-status').textContent = 'Permissions required';
-        }
-
-        function requestMediaAccess() {
-            document.getElementById('permission-error').textContent = '';
-            
-            navigator.mediaDevices.getUserMedia({ audio: true, video: true })
-                .then(stream => {
-                    // Got access - stop the stream (we just needed permission)
-                    stream.getTracks().forEach(track => track.stop());
-                    
-                    hasCameraAccess = true;
-                    hasMicrophoneAccess = true;
-                    hidePermissionPrompt();
-                    initCallFrame();
-                })
-                .catch(error => {
-                    console.error('Permission error:', error);
-                    
-                    let errorMessage = 'Could not access camera/microphone.';
-                    if (error.name === 'NotAllowedError') {
-                        errorMessage = 'Permission was denied. Please allow access to continue.';
-                    } else if (error.name === 'NotFoundError') {
-                        errorMessage = 'No camera/microphone found.';
-                    } else if (error.name === 'NotReadableError') {
-                        errorMessage = 'Camera/microphone is already in use.';
-                    }
-                    
-                    document.getElementById('permission-error').textContent = errorMessage;
-                    showPermissionDenied();
-                });
-        }
-
-        function continueWithoutMedia() {
-            hasCameraAccess = false;
-            hasMicrophoneAccess = false;
-            hidePermissionPrompt();
-            initCallFrame();
-        }
-
-        function showHelp() {
-            alert("To enable permissions:\n\n1. Click the lock icon in your browser's address bar\n2. Select 'Site settings'\n3. Change Camera and Microphone to 'Allow'");
-        }
-
-        function initCallFrame() {
-            document.getElementById('meeting-status').textContent = 'Connecting...';
-            document.getElementById('video-placeholder').style.display = 'none';
-            
-            // Enable controls based on permissions
-            document.getElementById('toggle-video').disabled = !hasCameraAccess;
-            document.getElementById('toggle-audio').disabled = !hasMicrophoneAccess;
-            document.getElementById('share-screen').disabled = false;
-            document.getElementById('leave-call').disabled = false;
-
             // Initialize the call frame
             callFrame = window.DailyIframe.createFrame(
                 document.getElementById('video-container'),
@@ -392,12 +157,8 @@
                 }
             );
             
-            // Join the call with appropriate media settings
-            callFrame.join({ 
-                url: 'https://grwcroyal.daily.co/hello-daily',
-                audio: hasMicrophoneAccess,
-                video: hasCameraAccess
-            });
+            // Join the call
+            callFrame.join({ url: 'https://grwcroyal.daily.co/hello-daily' });
             
             // Set up event listeners
             callFrame
@@ -412,7 +173,7 @@
             document.getElementById('toggle-audio').addEventListener('click', toggleAudio);
             document.getElementById('share-screen').addEventListener('click', shareScreen);
             document.getElementById('leave-call').addEventListener('click', leaveCall);
-        }
+        });
         
         function updateMeetingStatus(ev) {
             document.getElementById('meeting-status').textContent = 'Meeting connected';
@@ -422,12 +183,9 @@
         function handleLeftMeeting(ev) {
             document.getElementById('meeting-status').textContent = 'Left meeting';
             document.getElementById('participant-count').textContent = '0 participants';
-            document.getElementById('video-placeholder').style.display = 'block';
         }
         
         function updateParticipantCount() {
-            if (!callFrame) return;
-            
             const participants = callFrame.participants();
             const count = Object.keys(participants).length;
             document.getElementById('participant-count').textContent = 
@@ -436,40 +194,22 @@
         
         function handleError(ev) {
             console.error('Daily.co error:', ev);
-            
-            let errorMsg = 'Error connecting to meeting';
-            if (ev.errorMsg) {
-                errorMsg += ': ' + ev.errorMsg;
-            }
-            
-            document.getElementById('meeting-status').textContent = errorMsg;
-            
-            // Show placeholder if there's an error
-            document.getElementById('video-placeholder').style.display = 'block';
-            document.getElementById('video-placeholder').innerHTML = `
-                <h3>Meeting Error</h3>
-                <p>${errorMsg}</p>
-                <button onclick="location.reload()">Try Again</button>
-            `;
+            document.getElementById('meeting-status').textContent = 'Error: ' + (ev.errorMsg || 'Unknown error');
         }
         
         function toggleVideo() {
-            if (!callFrame) return;
             callFrame.setLocalVideo(!callFrame.localVideo());
         }
         
         function toggleAudio() {
-            if (!callFrame) return;
             callFrame.setLocalAudio(!callFrame.localAudio());
         }
         
         function shareScreen() {
-            if (!callFrame) return;
             callFrame.startScreenShare();
         }
         
         function leaveCall() {
-            if (!callFrame) return;
             callFrame.leave();
         }
     </script>
